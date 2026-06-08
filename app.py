@@ -2,6 +2,7 @@ import streamlit as st
 from openai import OpenAI
 import random
 from datetime import datetime
+import json
 
 st.set_page_config(page_title="🏠 Grok Architecture Studio", layout="wide", initial_sidebar_state="expanded")
 
@@ -23,17 +24,26 @@ with st.expander("👋 My Story", expanded=False):
     **Welcome to my personal Architecture Studio!** 🌍✨
     """)
 
-# Safe API Key - Local + Cloud friendly
+# ====================== SAFE API KEY ======================
+api_key = None
 try:
     api_key = st.secrets["XAI_API_KEY"]
 except:
-    api_key = st.sidebar.text_input("🔑 xAI API Key (local use)", type="password", help="Only needed when running locally")
+    api_key = st.sidebar.text_input("🔑 xAI API Key (local testing)", type="password")
+
+# Load favorites
+if "favorites" not in st.session_state:
+    try:
+        with open("favorites.json", "r") as f:
+            st.session_state.favorites = json.load(f)
+    except:
+        st.session_state.favorites = []
 
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Settings")
     mode = st.radio("Design Mode", ["Exterior", "Interior"], horizontal=True)
-    num_images = st.slider("Number of images", 1, 4, 4)
+    num_images = st.slider("Number of images", 1, 4, 3)
 
 tab1, tab2, tab3 = st.tabs(["🎨 Create", "❤️ Favorites", "🖼️ All Gallery"])
 
@@ -42,12 +52,12 @@ with tab1:
     
     with col1:
         st.subheader("Design Parameters")
-        view_type = st.selectbox("View Type", ["exterior outlook", "interior", "drone view", "isometric", "perspective"])
+        view_type = st.selectbox("View Type", ["exterior outlook", "interior living room", "interior kitchen", "interior bedroom", "drone view"])
         house_type = st.text_input("House Type", "modern minimalist villa")
         roof = st.text_input("Roof / Ceiling", "flat roof with generous overhangs")
         materials = st.text_input("Materials", "white concrete, warm wood accents, large glass panels")
         landscape = st.text_input("Surroundings", "Mediterranean garden, infinity pool, Lisbon hills")
-        lighting = st.selectbox("Lighting", ["golden hour sunset", "soft morning light", "dramatic blue hour"])
+        lighting = st.selectbox("Lighting", ["golden hour sunset", "soft morning light", "dramatic blue hour", "cozy interior lighting"])
         mood = st.text_input("Mood", "warm, serene and luxurious")
 
     with col2:
@@ -72,7 +82,7 @@ with tab1:
                     try:
                         client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
                         base = f"A highly detailed {view_type} of a {house_type} with {roof}, {materials}"
-                        if landscape:
+                        if landscape and mode == "Exterior":
                             base += f", set in {landscape}"
                         prompt = f"{base}. {lighting}, {mood} atmosphere. Professional architectural visualization, sharp details, photorealistic."
 
@@ -97,7 +107,7 @@ with tab1:
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-    # Latest Generation with buttons
+    # Latest Generation
     if "history" in st.session_state and st.session_state.history:
         item = st.session_state.history[0]
         st.subheader("Latest Generation")
@@ -107,20 +117,50 @@ with tab1:
                 st.image(url, use_column_width=True)
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("❤️", key=f"heart_{i}"):
-                        if "favorites" not in st.session_state: st.session_state.favorites = []
+                    if st.button("❤️", key=f"heart_latest_{i}"):
                         st.session_state.favorites.append({"url": url, "prompt": item["prompt"], "time": item["time"]})
                         st.toast("❤️ Added!")
                 with c2:
-                    if st.button("🔄 Variant", key=f"var_{i}"):
+                    if st.button("🔄 Variant", key=f"var_latest_{i}"):
                         st.session_state.variant_base = url
+                        st.session_state.variant_prompt = item["prompt"]
                         st.rerun()
+
+# Variant Feature
+if "variant_base" in st.session_state:
+    st.subheader("🔄 Create Variant")
+    desc = st.text_input("How should it differ?", placeholder="make it more luxurious, add a pool, night time, warmer colors...")
+    if st.button("Generate Variant"):
+        if api_key:
+            with st.spinner("Creating variant..."):
+                new_prompt = st.session_state.variant_prompt + f". {desc}"
+                try:
+                    client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+                    response = client.images.generate(model="grok-imagine-image-quality", prompt=new_prompt, n=1, response_format="url")
+                    new_url = response.data[0].url
+                    st.image(new_url, use_column_width=True)
+                    if st.button("❤️ Save this variant"):
+                        st.session_state.favorites.append({"url": new_url, "prompt": new_prompt, "time": datetime.now().strftime("%H:%M")})
+                        st.toast("❤️ Saved!")
+                except Exception as e:
+                    st.error(e)
+        else:
+            st.error("API key required")
 
 with tab2:
     st.subheader("❤️ My Favorites")
-    if "favorites" not in st.session_state or not st.session_state.favorites:
-        st.info("Click ❤️ on images to save them here")
+    if not st.session_state.favorites:
+        st.info("No favorites yet")
     else:
+        if st.button("💾 Save to file"):
+            with open("favorites.json", "w") as f:
+                json.dump(st.session_state.favorites, f)
+            st.success("Saved!")
+        uploaded = st.file_uploader("Load saved favorites", type="json")
+        if uploaded:
+            st.session_state.favorites = json.load(uploaded)
+            st.success("Loaded!")
+
         cols = st.columns(3)
         for idx, fav in enumerate(st.session_state.favorites):
             with cols[idx % 3]:
@@ -139,7 +179,7 @@ with tab3:
     if "history" not in st.session_state or not st.session_state.history:
         st.info("Generate some images first!")
     else:
-        for item in st.session_state.history:
+        for gen_idx, item in enumerate(st.session_state.history):
             st.markdown(f"**{item['time']}** — {item['mode']} • {item['prompt']}")
             cols = st.columns(4)
             for i, url in enumerate(item["images"]):
@@ -147,13 +187,13 @@ with tab3:
                     st.image(url, use_column_width=True)
                     c1, c2 = st.columns(2)
                     with c1:
-                        if st.button("❤️", key=f"allh_{i}"):
-                            if "favorites" not in st.session_state: st.session_state.favorites = []
+                        if st.button("❤️", key=f"allh_{gen_idx}_{i}"):
                             st.session_state.favorites.append({"url": url, "prompt": item["prompt"], "time": item["time"]})
                             st.toast("❤️ Added!")
                     with c2:
-                        if st.button("🔄", key=f"allv_{i}"):
+                        if st.button("🔄", key=f"allv_{gen_idx}_{i}"):
                             st.session_state.variant_base = url
+                            st.session_state.variant_prompt = item["prompt"]
                             st.rerun()
 
 st.caption("Built with ❤️ by Helgi • Powered by xAI Grok Imagine")
