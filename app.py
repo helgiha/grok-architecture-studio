@@ -8,7 +8,8 @@ st.set_page_config(page_title="🏠 Grok Architecture Studio", layout="wide", in
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: #FAFAFA; }
-    .heart-button { color: #FF4B4B; font-size: 1.5rem; }
+    .stTabs [data-baseweb="tab-list"] button { color: #FFFFFF !important; font-weight: 600; }
+    .stTabs [data-baseweb="tab-list"] button:hover { color: #FFCC00 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -22,13 +23,18 @@ with st.expander("👋 My Story", expanded=False):
     **Welcome to my personal Architecture Studio!** 🌍✨
     """)
 
+# Safe API Key - Local + Cloud friendly
+try:
+    api_key = st.secrets["XAI_API_KEY"]
+except:
+    api_key = st.sidebar.text_input("🔑 xAI API Key (local use)", type="password", help="Only needed when running locally")
+
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Settings")
     mode = st.radio("Design Mode", ["Exterior", "Interior"], horizontal=True)
     num_images = st.slider("Number of images", 1, 4, 4)
 
-# Tabs
 tab1, tab2, tab3 = st.tabs(["🎨 Create", "❤️ Favorites", "🖼️ All Gallery"])
 
 with tab1:
@@ -59,36 +65,39 @@ with tab1:
             st.rerun()
 
         if st.button("🚀 Generate Images", type="primary", use_container_width=True):
-            with st.spinner("Generating beautiful images..."):
-                try:
-                    client = OpenAI(api_key=st.secrets["XAI_API_KEY"], base_url="https://api.x.ai/v1")
-                    base = f"A highly detailed {view_type} of a {house_type} with {roof}, {materials}"
-                    if landscape:
-                        base += f", set in {landscape}"
-                    prompt = f"{base}. {lighting}, {mood} atmosphere. Professional architectural visualization, sharp details, photorealistic."
+            if not api_key:
+                st.error("Please enter your xAI API key in the sidebar")
+            else:
+                with st.spinner("Generating..."):
+                    try:
+                        client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+                        base = f"A highly detailed {view_type} of a {house_type} with {roof}, {materials}"
+                        if landscape:
+                            base += f", set in {landscape}"
+                        prompt = f"{base}. {lighting}, {mood} atmosphere. Professional architectural visualization, sharp details, photorealistic."
 
-                    response = client.images.generate(
-                        model="grok-imagine-image-quality",
-                        prompt=prompt,
-                        n=num_images,
-                        response_format="url"
-                    )
-                    images = [img.url for img in response.data]
+                        response = client.images.generate(
+                            model="grok-imagine-image-quality",
+                            prompt=prompt,
+                            n=num_images,
+                            response_format="url"
+                        )
+                        images = [img.url for img in response.data]
 
-                    if "history" not in st.session_state:
-                        st.session_state.history = []
-                    
-                    st.session_state.history.insert(0, {
-                        "prompt": prompt[:160] + "...",
-                        "images": images,
-                        "time": datetime.now().strftime("%H:%M"),
-                        "mode": mode
-                    })
-                    st.success("✅ Images generated!")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                        if "history" not in st.session_state:
+                            st.session_state.history = []
+                        
+                        st.session_state.history.insert(0, {
+                            "prompt": prompt[:160] + "...",
+                            "images": images,
+                            "time": datetime.now().strftime("%H:%M"),
+                            "mode": mode
+                        })
+                        st.success("✅ Images generated!")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
-    # Display latest generation with actions
+    # Latest Generation with buttons
     if "history" in st.session_state and st.session_state.history:
         item = st.session_state.history[0]
         st.subheader("Latest Generation")
@@ -96,18 +105,13 @@ with tab1:
         for i, url in enumerate(item["images"]):
             with cols[i]:
                 st.image(url, use_column_width=True)
-                col_a, col_b = st.columns(2)
-                with col_a:
+                c1, c2 = st.columns(2)
+                with c1:
                     if st.button("❤️", key=f"heart_{i}"):
-                        if "favorites" not in st.session_state:
-                            st.session_state.favorites = []
-                        st.session_state.favorites.append({
-                            "url": url, 
-                            "prompt": item["prompt"], 
-                            "time": item["time"]
-                        })
-                        st.toast("Added to Favorites ❤️", icon="❤️")
-                with col_b:
+                        if "favorites" not in st.session_state: st.session_state.favorites = []
+                        st.session_state.favorites.append({"url": url, "prompt": item["prompt"], "time": item["time"]})
+                        st.toast("❤️ Added!")
+                with c2:
                     if st.button("🔄 Variant", key=f"var_{i}"):
                         st.session_state.variant_base = url
                         st.rerun()
@@ -115,27 +119,41 @@ with tab1:
 with tab2:
     st.subheader("❤️ My Favorites")
     if "favorites" not in st.session_state or not st.session_state.favorites:
-        st.info("Click ❤️ on images you like to save them here")
+        st.info("Click ❤️ on images to save them here")
     else:
         cols = st.columns(3)
         for idx, fav in enumerate(st.session_state.favorites):
             with cols[idx % 3]:
                 st.image(fav["url"], use_column_width=True)
                 st.caption(fav["time"])
-                if st.button("Remove", key=f"rem_{idx}"):
-                    st.session_state.favorites.pop(idx)
-                    st.rerun()
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.download_button("⬇️", fav["url"], f"favorite_{idx}.png", key=f"dl{idx}")
+                with c2:
+                    if st.button("🗑️", key=f"rem{idx}"):
+                        st.session_state.favorites.pop(idx)
+                        st.rerun()
 
 with tab3:
     st.subheader("🖼️ All Gallery")
     if "history" not in st.session_state or not st.session_state.history:
-        st.info("No generations yet")
+        st.info("Generate some images first!")
     else:
         for item in st.session_state.history:
             st.markdown(f"**{item['time']}** — {item['mode']} • {item['prompt']}")
             cols = st.columns(4)
-            for url in item["images"]:
-                with cols[0]:
+            for i, url in enumerate(item["images"]):
+                with cols[i]:
                     st.image(url, use_column_width=True)
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("❤️", key=f"allh_{i}"):
+                            if "favorites" not in st.session_state: st.session_state.favorites = []
+                            st.session_state.favorites.append({"url": url, "prompt": item["prompt"], "time": item["time"]})
+                            st.toast("❤️ Added!")
+                    with c2:
+                        if st.button("🔄", key=f"allv_{i}"):
+                            st.session_state.variant_base = url
+                            st.rerun()
 
 st.caption("Built with ❤️ by Helgi • Powered by xAI Grok Imagine")
