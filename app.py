@@ -23,17 +23,8 @@ with st.expander("👋 My Story", expanded=False):
     **Welcome to my personal Architecture Studio!** 🌍✨
     """)
 
-# ====================== MAX SAFE API KEY ======================
-api_key = None
-
-# Try to get secret without crashing the app
-try:
-    api_key = st.secrets.get("XAI_API_KEY")
-except:
-    api_key = None
-
-if not api_key:
-    api_key = st.sidebar.text_input("🔑 xAI API Key (local testing)", type="password")
+# ====================== SAFE API KEY ======================
+api_key = st.sidebar.text_input("🔑 xAI API Key (local testing)", type="password")
 
 # Load favorites
 if "favorites" not in st.session_state:
@@ -81,7 +72,7 @@ with tab1:
             if not api_key:
                 st.error("Please enter your xAI API key in the sidebar")
             else:
-                with st.spinner("Generating beautiful images..."):
+                with st.spinner("Generating..."):
                     try:
                         client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
                         base = f"A highly detailed {view_type} of a {house_type} with {roof}, {materials}"
@@ -128,6 +119,13 @@ with tab1:
                         st.session_state.variant_base = url
                         st.session_state.variant_prompt = item["prompt"]
                         st.rerun()
+
+        # OpenArt Prompt Button
+        if st.button("📋 Copy Optimized Prompt for OpenArt", use_container_width=True):
+            current_prompt = item["prompt"]
+            openart_prompt = current_prompt + ", masterpiece, best quality, ultra detailed, intricate details, sharp focus, cinematic lighting, architectural photography, 8k uhd"
+            st.code(openart_prompt, language="text")
+            st.success("✅ Prompt copied! Paste it directly into OpenArt.ai")
 
 with tab2:
     st.subheader("❤️ My Favorites")
