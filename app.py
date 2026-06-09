@@ -10,7 +10,6 @@ st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: #FAFAFA; }
     .stTabs [data-baseweb="tab-list"] button { color: #FFFFFF !important; font-weight: 600; }
-    .stTabs [data-baseweb="tab-list"] button:hover { color: #FFCC00 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -24,11 +23,16 @@ with st.expander("👋 My Story", expanded=False):
     **Welcome to my personal Architecture Studio!** 🌍✨
     """)
 
-# ====================== SAFE API KEY ======================
+# ====================== MAX SAFE API KEY ======================
 api_key = None
+
+# Try to get secret without crashing the app
 try:
-    api_key = st.secrets["XAI_API_KEY"]
+    api_key = st.secrets.get("XAI_API_KEY")
 except:
+    api_key = None
+
+if not api_key:
     api_key = st.sidebar.text_input("🔑 xAI API Key (local testing)", type="password")
 
 # Load favorites
@@ -39,7 +43,6 @@ if "favorites" not in st.session_state:
     except:
         st.session_state.favorites = []
 
-# Sidebar
 with st.sidebar:
     st.header("⚙️ Settings")
     mode = st.radio("Design Mode", ["Exterior", "Interior"], horizontal=True)
@@ -78,7 +81,7 @@ with tab1:
             if not api_key:
                 st.error("Please enter your xAI API key in the sidebar")
             else:
-                with st.spinner("Generating..."):
+                with st.spinner("Generating beautiful images..."):
                     try:
                         client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
                         base = f"A highly detailed {view_type} of a {house_type} with {roof}, {materials}"
@@ -126,41 +129,11 @@ with tab1:
                         st.session_state.variant_prompt = item["prompt"]
                         st.rerun()
 
-# Variant Feature
-if "variant_base" in st.session_state:
-    st.subheader("🔄 Create Variant")
-    desc = st.text_input("How should it differ?", placeholder="make it more luxurious, add a pool, night time, warmer colors...")
-    if st.button("Generate Variant"):
-        if api_key:
-            with st.spinner("Creating variant..."):
-                new_prompt = st.session_state.variant_prompt + f". {desc}"
-                try:
-                    client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
-                    response = client.images.generate(model="grok-imagine-image-quality", prompt=new_prompt, n=1, response_format="url")
-                    new_url = response.data[0].url
-                    st.image(new_url, use_column_width=True)
-                    if st.button("❤️ Save this variant"):
-                        st.session_state.favorites.append({"url": new_url, "prompt": new_prompt, "time": datetime.now().strftime("%H:%M")})
-                        st.toast("❤️ Saved!")
-                except Exception as e:
-                    st.error(e)
-        else:
-            st.error("API key required")
-
 with tab2:
     st.subheader("❤️ My Favorites")
     if not st.session_state.favorites:
         st.info("No favorites yet")
     else:
-        if st.button("💾 Save to file"):
-            with open("favorites.json", "w") as f:
-                json.dump(st.session_state.favorites, f)
-            st.success("Saved!")
-        uploaded = st.file_uploader("Load saved favorites", type="json")
-        if uploaded:
-            st.session_state.favorites = json.load(uploaded)
-            st.success("Loaded!")
-
         cols = st.columns(3)
         for idx, fav in enumerate(st.session_state.favorites):
             with cols[idx % 3]:
